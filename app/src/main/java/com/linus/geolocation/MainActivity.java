@@ -5,11 +5,18 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.linus.geolocation.Constants;
+
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Looper;
+import android.os.ResultReceiver;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
@@ -24,15 +31,18 @@ import com.google.android.gms.location.LocationServices;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener {
-    @BindView(R.id.btnGeoLocation)
-    Button mBtnGeoLocation;
+public class MainActivity extends AppCompatActivity {
+    public static final String TAG = MainActivity.class.getSimpleName();
+
     @BindView(R.id.progressBar)
     ProgressBar mProgressBar;
     @BindView(R.id.txtGeoLocation)
     TextView mTxtGeoLocation;
     @BindView(R.id.txtAddress)
     TextView mTxtAddress;
+    private String mAddress;
+
+    private ResultReceiver resultReceiver;
 
     private static final int REQUEST_CODE_LOCATION_PERMISSION = 1;
 
@@ -42,23 +52,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         setContentView(R.layout.activity_main);
 
         ButterKnife.bind(this);
-        mBtnGeoLocation.setOnClickListener(this);
+
+        gettingLocation();
+        resultReceiver=new AddressResultReceiver(new Handler());
     }
 
-    @Override
-    public void onClick(View v) {
-        if (v == mBtnGeoLocation) {
-            if (ContextCompat.checkSelfPermission(
-                    getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION
-            ) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(
-                        MainActivity.this,
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
-                        REQUEST_CODE_LOCATION_PERMISSION
-                );
-            } else {
-                getCurrentLocation();
-            }
+    private void gettingLocation() {
+        if (ContextCompat.checkSelfPermission(
+                getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION
+        ) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                    MainActivity.this,
+                    new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
+                    REQUEST_CODE_LOCATION_PERMISSION
+            );
+        } else {
+            getCurrentLocation();
         }
     }
 
@@ -83,13 +92,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         locationRequest.setPriority(locationRequest.PRIORITY_HIGH_ACCURACY);
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+
             return;
         }
         LocationServices.getFusedLocationProviderClient(MainActivity.this)
@@ -112,9 +115,41 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                                             longitude
                                     )
                             );
+                            Log.d(TAG,"myLocation"+longitude+latitude);
+
+                            Location location=new Location("providerNa");
+                            location.setLatitude(latitude);
+                            location.setLongitude(longitude);
+                            getLatLong(location);
+                        }else {
+                            mProgressBar.setVisibility(View.GONE);
                         }
-                        mProgressBar.setVisibility(View.GONE);
                     }
                 }, Looper.getMainLooper());
+    }
+
+    private void getLatLong(Location location){
+        Intent intent=new Intent(this, FetchAddressService.class);
+        intent.putExtra(Constants.RECEIVER,resultReceiver);
+        intent.putExtra(Constants.LOCATION_DATA_EXTRA,location);
+        startService(intent);
+    }
+
+    private class AddressResultReceiver extends ResultReceiver{
+        public AddressResultReceiver(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        protected void onReceiveResult(int resultCode, Bundle resultData) {
+            super.onReceiveResult(resultCode, resultData);
+            if (resultCode== Constants.SUCCESS_RESULT){
+                mTxtAddress.setText(resultData.getString(Constants.RESULT_DATA_KEY));
+                Log.d(TAG,"myLocation"+resultData.getString(Constants.RESULT_DATA_KEY));
+
+            }else {
+                Toast.makeText(MainActivity.this,resultData.getString(Constants.RESULT_DATA_KEY),Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 }
